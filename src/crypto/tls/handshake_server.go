@@ -380,25 +380,27 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 		return err
 	}
 
-	certMsg := new(certificateMsg)
-	certMsg.certificates = hs.cert.Certificate
-	hs.finishedHash.Write(certMsg.marshal())
-	if _, err := c.writeRecord(recordTypeHandshake, certMsg.marshal()); err != nil {
-		return err
-	}
-
-	if hs.hello.ocspStapling {
-		certStatus := new(certificateStatusMsg)
-		certStatus.statusType = statusTypeOCSP
-		certStatus.response = hs.cert.OCSPStaple
-		hs.finishedHash.Write(certStatus.marshal())
-		if _, err := c.writeRecord(recordTypeHandshake, certStatus.marshal()); err != nil {
+	if hs.suite.flags&suitePSK == 0 {
+		certMsg := new(certificateMsg)
+		certMsg.certificates = hs.cert.Certificate
+		hs.finishedHash.Write(certMsg.marshal())
+		if _, err := c.writeRecord(recordTypeHandshake, certMsg.marshal()); err != nil {
 			return err
+		}
+
+		if hs.hello.ocspStapling {
+			certStatus := new(certificateStatusMsg)
+			certStatus.statusType = statusTypeOCSP
+			certStatus.response = hs.cert.OCSPStaple
+			hs.finishedHash.Write(certStatus.marshal())
+			if _, err := c.writeRecord(recordTypeHandshake, certStatus.marshal()); err != nil {
+				return err
+			}
 		}
 	}
 
 	keyAgreement := hs.suite.ka(c.vers)
-	skx, err := keyAgreement.generateServerKeyExchange(c.config, hs.cert, hs.clientHello, hs.hello)
+	skx, err := keyAgreement.generateServerKeyExchange(c.config, hs.cert, hs.clientHello, hs.clientHelloInfo(), hs.hello)
 	if err != nil {
 		c.sendAlert(alertHandshakeFailure)
 		return err
@@ -457,7 +459,8 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 	// If we requested a client certificate, then the client must send a
 	// certificate message, even if it's empty.
 	if c.config.ClientAuth >= RequestClientCert {
-		if certMsg, ok = msg.(*certificateMsg); !ok {
+		certMsg, ok := msg.(*certificateMsg)
+		if !ok {
 			c.sendAlert(alertUnexpectedMessage)
 			return unexpectedMessageError(certMsg, msg)
 		}

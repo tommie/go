@@ -508,6 +508,17 @@ type Config struct {
 	// used for debugging.
 	KeyLogWriter io.Writer
 
+	// IdentityHint optionally allows a server that uses preshared keys to
+	// present an identity hint to the client. By default, no hint is sent.
+	IdentityHint func(*ClientHelloInfo) []byte
+
+	// PresharedKey enables all PSK cipher suites in both client and server.
+	// For servers, idOrHint is the identity sent by the client, and the
+	// returned "id" is ignored. For clients, idOrHint is the (optional)
+	// identity hint sent by the server, and the returned "id" is sent to
+	// the server. By default, PSK cipher suites are disables.
+	PresharedKey func(idOrHint []byte) (key []byte, id []byte, err error)
+
 	serverInitOnce sync.Once // guards calling (*Config).serverInit
 
 	// mutex protects sessionTicketKeys.
@@ -581,6 +592,8 @@ func (c *Config) Clone() *Config {
 		DynamicRecordSizingDisabled: c.DynamicRecordSizingDisabled,
 		Renegotiation:               c.Renegotiation,
 		KeyLogWriter:                c.KeyLogWriter,
+		IdentityHint:                c.IdentityHint,
+		PresharedKey:                c.PresharedKey,
 		sessionTicketKeys:           sessionTicketKeys,
 	}
 }
@@ -667,7 +680,7 @@ func (c *Config) time() time.Time {
 func (c *Config) cipherSuites() []uint16 {
 	s := c.CipherSuites
 	if s == nil {
-		s = defaultCipherSuites()
+		s = defaultCipherSuites(c.PresharedKey != nil)
 	}
 	return s
 }
@@ -790,6 +803,20 @@ func (c *Config) writeKeyLog(clientRandom, masterSecret []byte) error {
 	return err
 }
 
+func (c *Config) identityHint(chi *ClientHelloInfo) []byte {
+	if c.IdentityHint == nil {
+		return nil
+	}
+	return c.IdentityHint(chi)
+}
+
+func (c *Config) presharedKey(idHint []byte) ([]byte, []byte, error) {
+	if c.PresharedKey == nil {
+		return nil, nil, errors.New("tls: no preshared key configured")
+	}
+	return c.PresharedKey(idHint)
+}
+
 // writerMutex protects all KeyLogWriters globally. It is rarely enabled,
 // and is only for debugging, so a global mutex saves space.
 var writerMutex sync.Mutex
@@ -906,12 +933,16 @@ func defaultConfig() *Config {
 }
 
 var (
-	once                   sync.Once
-	varDefaultCipherSuites []uint16
+	once                          sync.Once
+	varDefaultCipherSuites        []uint16
+	varDefaultCipherSuitesWithPSK []uint16
 )
 
-func defaultCipherSuites() []uint16 {
+func defaultCipherSuites(psk bool) []uint16 {
 	once.Do(initDefaultCipherSuites)
+	if psk {
+		return varDefaultCipherSuitesWithPSK
+	}
 	return varDefaultCipherSuites
 }
 
@@ -956,6 +987,16 @@ NextCipherSuite:
 		}
 		varDefaultCipherSuites = append(varDefaultCipherSuites, suite.id)
 	}
+
+	varDefaultCipherSuitesWithPSK = make([]uint16, 0, len(cipherSuites))
+	// Prepend preshared keys since we only use this default if Config.PresharedKey != nil.
+	for _, suite := range cipherSuites {
+		if suite.flags&suitePSK == 0 {
+			continue
+		}
+		varDefaultCipherSuitesWithPSK = append(varDefaultCipherSuitesWithPSK, suite.id)
+	}
+	varDefaultCipherSuitesWithPSK = append(varDefaultCipherSuitesWithPSK, varDefaultCipherSuites...)
 }
 
 func unexpectedMessageError(wanted, got interface{}) error {

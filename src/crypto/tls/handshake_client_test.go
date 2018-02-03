@@ -433,7 +433,8 @@ func setParallel(t *testing.T) {
 	v := didPar[t]
 	didPar[t] = true
 	didParMu.Unlock()
-	if !v {
+	// -update runs openssl on the same port for all tests.
+	if !v && !*update {
 		t.Parallel()
 	}
 }
@@ -593,6 +594,98 @@ func TestHandshakeClientECDHEECDSAChaCha20(t *testing.T) {
 		config:  config,
 		cert:    testECDSACertificate,
 		key:     testECDSAPrivateKey,
+	}
+
+	runClientTestTLS12(t, test)
+}
+
+func TestHandshakeClientPSKAES128GCMSHA256(t *testing.T) {
+	config := testConfig.Clone()
+	config.CipherSuites = []uint16{TLS_PSK_WITH_AES_128_GCM_SHA256}
+	config.PresharedKey = func(idHint []byte) ([]byte, []byte, error) {
+		// Client_identity is hardcoded in openssl s_server and must match.
+		return []byte("psk"), []byte("Client_identity"), nil
+	}
+
+	test := &clientTest{
+		name:    "PSK-AES128-GCM-SHA256",
+		command: []string{"openssl", "s_server", "-cipher", "PSK-AES128-GCM-SHA256", "-psk", "70736b"},
+		config:  config,
+	}
+
+	runClientTestTLS12(t, test)
+}
+
+func TestHandshakeClientPSKAES256GCMSHA384(t *testing.T) {
+	config := testConfig.Clone()
+	config.CipherSuites = []uint16{TLS_PSK_WITH_AES_256_GCM_SHA384}
+	config.PresharedKey = func(idHint []byte) ([]byte, []byte, error) {
+		// Client_identity is hardcoded in openssl s_server and must match.
+		return []byte("psk"), []byte("Client_identity"), nil
+	}
+
+	test := &clientTest{
+		name:    "PSK-AES256-GCM-SHA384",
+		command: []string{"openssl", "s_server", "-cipher", "PSK-AES256-GCM-SHA384", "-psk", "70736b"},
+		config:  config,
+	}
+
+	runClientTestTLS12(t, test)
+}
+
+func TestHandshakeClientPSKAES128CBCSHA256(t *testing.T) {
+	config := testConfig.Clone()
+	config.CipherSuites = []uint16{TLS_PSK_WITH_AES_128_CBC_SHA256}
+	config.PresharedKey = func(idHint []byte) ([]byte, []byte, error) {
+		// Client_identity is hardcoded in openssl s_server and must match.
+		return []byte("psk"), []byte("Client_identity"), nil
+	}
+
+	test := &clientTest{
+		name:    "PSK-AES128-CBC-SHA256",
+		command: []string{"openssl", "s_server", "-cipher", "PSK-AES128-CBC-SHA256", "-psk", "70736b"},
+		config:  config,
+	}
+
+	runClientTestTLS10(t, test)
+	runClientTestTLS11(t, test)
+	runClientTestTLS12(t, test)
+}
+
+func TestHandshakeClientPSKAES256CBCSHA384(t *testing.T) {
+	config := testConfig.Clone()
+	config.CipherSuites = []uint16{TLS_PSK_WITH_AES_256_CBC_SHA384}
+	config.PresharedKey = func(idHint []byte) ([]byte, []byte, error) {
+		// Client_identity is hardcoded in openssl s_server and must match.
+		return []byte("psk"), []byte("Client_identity"), nil
+	}
+
+	test := &clientTest{
+		name:    "PSK-AES256-CBC-SHA384",
+		command: []string{"openssl", "s_server", "-cipher", "PSK-AES256-CBC-SHA384", "-psk", "70736b"},
+		config:  config,
+	}
+
+	runClientTestTLS10(t, test)
+	runClientTestTLS11(t, test)
+	runClientTestTLS12(t, test)
+}
+
+func TestHandshakeClientPSKIdentity(t *testing.T) {
+	config := testConfig.Clone()
+	config.CipherSuites = []uint16{TLS_PSK_WITH_AES_128_GCM_SHA256}
+	config.PresharedKey = func(idHint []byte) ([]byte, []byte, error) {
+		if exp := []byte("hint"); !bytes.Equal(idHint, exp) {
+			t.Errorf("PresharedKey idHint: %v, expected: %v", idHint, exp)
+		}
+		// Client_identity is hardcoded in openssl s_server and must match.
+		return []byte("psk"), []byte("Client_identity"), nil
+	}
+
+	test := &clientTest{
+		name:    "PSK-identity",
+		command: []string{"openssl", "s_server", "-cipher", "PSK-AES128-GCM-SHA256", "-psk", "70736b", "-psk_hint", "hint"},
+		config:  config,
 	}
 
 	runClientTestTLS12(t, test)

@@ -619,7 +619,7 @@ func TestWarningAlertFlood(t *testing.T) {
 }
 
 func TestCloneFuncFields(t *testing.T) {
-	const expectedCount = 5
+	const expectedCount = 7
 	called := 0
 
 	c1 := Config{
@@ -643,6 +643,14 @@ func TestCloneFuncFields(t *testing.T) {
 			called |= 1 << 4
 			return nil
 		},
+		IdentityHint: func(*ClientHelloInfo) []byte {
+			called |= 1 << 5
+			return nil
+		},
+		PresharedKey: func([]byte) ([]byte, []byte, error) {
+			called |= 1 << 6
+			return nil, nil, nil
+		},
 	}
 
 	c2 := c1.Clone()
@@ -652,6 +660,8 @@ func TestCloneFuncFields(t *testing.T) {
 	c2.GetClientCertificate(nil)
 	c2.GetConfigForClient(nil)
 	c2.VerifyPeerCertificate(nil, nil)
+	c2.IdentityHint(nil)
+	c2.PresharedKey(nil)
 
 	if called != (1<<expectedCount)-1 {
 		t.Fatalf("expected %d calls but saw calls %b", expectedCount, called)
@@ -675,7 +685,7 @@ func TestCloneNonFuncFields(t *testing.T) {
 		switch fn := typ.Field(i).Name; fn {
 		case "Rand":
 			f.Set(reflect.ValueOf(io.Reader(os.Stdin)))
-		case "Time", "GetCertificate", "GetConfigForClient", "VerifyPeerCertificate", "GetClientCertificate":
+		case "Time", "GetCertificate", "GetConfigForClient", "VerifyPeerCertificate", "GetClientCertificate", "IdentityHint", "PresharedKey":
 			// DeepEqual can't compare functions. If you add a
 			// function field to this list, you must also change
 			// TestCloneFuncFields to ensure that the func field is
