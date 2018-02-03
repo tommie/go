@@ -70,10 +70,10 @@ func NewListener(inner net.Listener, config *Config) net.Listener {
 // Listen creates a TLS listener accepting connections on the
 // given network address using net.Listen.
 // The configuration config must be non-nil and must include
-// at least one certificate or else set GetCertificate.
+// at least one certificate or else set GetCertificate or PresharedKey.
 func Listen(network, laddr string, config *Config) (net.Listener, error) {
-	if config == nil || (len(config.Certificates) == 0 && config.GetCertificate == nil) {
-		return nil, errors.New("tls: neither Certificates nor GetCertificate set in Config")
+	if config == nil || (len(config.Certificates) == 0 && config.GetCertificate == nil && config.PresharedKey == nil) {
+		return nil, errors.New("tls: one of Certificates, GetCertificate or PresharedKey must be set in Config")
 	}
 	l, err := net.Listen(network, laddr)
 	if err != nil {

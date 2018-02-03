@@ -27,7 +27,7 @@ var errServerKeyExchange = errors.New("tls: invalid ServerKeyExchange message")
 // encrypts the pre-master secret to the server's public key.
 type rsaKeyAgreement struct{}
 
-func (ka rsaKeyAgreement) generateServerKeyExchange(config *Config, cert *Certificate, clientHello *clientHelloMsg, hello *serverHelloMsg) (*serverKeyExchangeMsg, error) {
+func (ka rsaKeyAgreement) generateServerKeyExchange(config *Config, cert *Certificate, clientHello *clientHelloMsg, chi *ClientHelloInfo, hello *serverHelloMsg) (*serverKeyExchangeMsg, error) {
 	return nil, nil
 }
 
@@ -196,7 +196,7 @@ type ecdheKeyAgreement struct {
 	x, y *big.Int
 }
 
-func (ka *ecdheKeyAgreement) generateServerKeyExchange(config *Config, cert *Certificate, clientHello *clientHelloMsg, hello *serverHelloMsg) (*serverKeyExchangeMsg, error) {
+func (ka *ecdheKeyAgreement) generateServerKeyExchange(config *Config, cert *Certificate, clientHello *clientHelloMsg, chi *ClientHelloInfo, hello *serverHelloMsg) (*serverKeyExchangeMsg, error) {
 	preferredCurves := config.curvePreferences()
 
 NextCandidate:
@@ -471,4 +471,94 @@ func (ka *ecdheKeyAgreement) generateClientKeyExchange(config *Config, clientHel
 	copy(ckx.ciphertext[1:], serialized)
 
 	return preMasterSecret, ckx, nil
+}
+
+type pskKeyAgreement struct {
+	// idHint is (optionally) received in a serverKeyExchangeMsg.
+	idHint []byte
+}
+
+func (ka *pskKeyAgreement) generateServerKeyExchange(config *Config, cert *Certificate, clientHello *clientHelloMsg, chi *ClientHelloInfo, serverHello *serverHelloMsg) (*serverKeyExchangeMsg, error) {
+	idHint := config.identityHint(chi)
+
+	if idHint == nil {
+		// Don't send the message.
+		return nil, nil
+	}
+
+	skx := new(serverKeyExchangeMsg)
+	skx.key = make([]byte, 2+len(idHint))
+	skx.key[0] = byte(len(idHint) >> 8)
+	skx.key[1] = byte(len(idHint))
+	copy(skx.key[2:], idHint)
+
+	return skx, nil
+}
+
+func (ka *pskKeyAgreement) processClientKeyExchange(config *Config, cert *Certificate, ckx *clientKeyExchangeMsg, version uint16) ([]byte, error) {
+	if len(ckx.ciphertext) < 2 {
+		return nil, errClientKeyExchange
+	}
+	n := uint16(ckx.ciphertext[0])<<8 | uint16(ckx.ciphertext[1])
+	if len(ckx.ciphertext) != int(2+n) {
+		return nil, errClientKeyExchange
+	}
+	id := ckx.ciphertext[2 : 2+n]
+
+	psk, _, err := config.presharedKey(id)
+	if err != nil {
+		return nil, err
+	}
+	if len(psk) > 0xFFFF {
+		panic("tls: key too long")
+	}
+
+	return ka.preMasterSecret(psk), nil
+}
+
+func (ka *pskKeyAgreement) processServerKeyExchange(config *Config, clientHello *clientHelloMsg, serverHello *serverHelloMsg, cert *x509.Certificate, skx *serverKeyExchangeMsg) error {
+	if len(skx.key) < 2 {
+		return errServerKeyExchange
+	}
+	n := uint16(skx.key[0])<<8 | uint16(skx.key[1])
+	if len(skx.key) != int(2+n) {
+		return errServerKeyExchange
+	}
+	ka.idHint = skx.key[2 : 2+n]
+	return nil
+}
+
+func (ka *pskKeyAgreement) generateClientKeyExchange(config *Config, clientHello *clientHelloMsg, cert *x509.Certificate) ([]byte, *clientKeyExchangeMsg, error) {
+	psk, id, err := config.presharedKey(ka.idHint)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(id) > 0xFFFF {
+		panic("tls: id too long")
+	}
+	if len(psk) > 0xFFFF {
+		panic("tls: key too long")
+	}
+
+	ckx := new(clientKeyExchangeMsg)
+	ckx.ciphertext = make([]byte, 2+len(id))
+	ckx.ciphertext[0] = byte(len(id) >> 8)
+	ckx.ciphertext[1] = byte(len(id))
+	copy(ckx.ciphertext[2:], id)
+
+	return ka.preMasterSecret(psk), ckx, nil
+}
+
+func (ka *pskKeyAgreement) preMasterSecret(psk []byte) []byte {
+	// No DHE or RSA. Fill other_secret with zeros.
+	n := len(psk)
+	bs := make([]byte, 2+n+2+n)
+	bs[0] = byte(n >> 8)
+	bs[1] = byte(n)
+
+	bs[2+n] = byte(n >> 8)
+	bs[2+n+1] = byte(n)
+	copy(bs[2+n+2:], psk)
+
+	return bs
 }

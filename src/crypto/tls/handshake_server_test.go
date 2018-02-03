@@ -769,6 +769,86 @@ func TestHandshakeServerX25519(t *testing.T) {
 	runServerTestTLS12(t, test)
 }
 
+func TestHandshakeServerPSKAES128GCMSHA256(t *testing.T) {
+	config := testConfig.Clone()
+	config.PresharedKey = func(idHint []byte) ([]byte, []byte, error) {
+		return []byte("psk"), idHint, nil
+	}
+
+	test := &serverTest{
+		name:    "PSK-AES128-GCM-SHA256",
+		command: []string{"openssl", "s_client", "-no_ticket", "-cipher", "PSK-AES128-GCM-SHA256", "-psk", "70736b"},
+		config:  config,
+	}
+	runServerTestTLS12(t, test)
+}
+
+func TestHandshakeServerPSKAES256GCMSHA384(t *testing.T) {
+	config := testConfig.Clone()
+	config.PresharedKey = func(idHint []byte) ([]byte, []byte, error) {
+		return []byte("psk"), idHint, nil
+	}
+
+	test := &serverTest{
+		name:    "PSK-AES256-GCM-SHA384",
+		command: []string{"openssl", "s_client", "-no_ticket", "-cipher", "PSK-AES256-GCM-SHA384", "-psk", "70736b"},
+		config:  config,
+	}
+	runServerTestTLS12(t, test)
+}
+
+func TestHandshakeServerPSKAES128CBCSHA256(t *testing.T) {
+	config := testConfig.Clone()
+	config.PresharedKey = func(idHint []byte) ([]byte, []byte, error) {
+		return []byte("psk"), idHint, nil
+	}
+
+	test := &serverTest{
+		name:    "PSK-AES128-CBC-SHA256",
+		command: []string{"openssl", "s_client", "-no_ticket", "-cipher", "PSK-AES128-CBC-SHA256", "-psk", "70736b"},
+		config:  config,
+	}
+	runServerTestTLS10(t, test)
+	runServerTestTLS11(t, test)
+	runServerTestTLS12(t, test)
+}
+
+func TestHandshakeServerPSKAES256CBCSHA384(t *testing.T) {
+	config := testConfig.Clone()
+	config.PresharedKey = func(idHint []byte) ([]byte, []byte, error) {
+		return []byte("psk"), idHint, nil
+	}
+
+	test := &serverTest{
+		name:    "PSK-AES256-CBC-SHA384",
+		command: []string{"openssl", "s_client", "-no_ticket", "-cipher", "PSK-AES256-CBC-SHA384", "-psk", "70736b"},
+		config:  config,
+	}
+	runServerTestTLS10(t, test)
+	runServerTestTLS11(t, test)
+	runServerTestTLS12(t, test)
+}
+
+func TestHandshakeServerPSKIdentity(t *testing.T) {
+	config := testConfig.Clone()
+	config.IdentityHint = func(*ClientHelloInfo) []byte {
+		return []byte("hint")
+	}
+	config.PresharedKey = func(idHint []byte) ([]byte, []byte, error) {
+		if exp := []byte("id"); !bytes.Equal(idHint, exp) {
+			t.Errorf("PresharedKey idHint: %v, expected: %v", idHint, exp)
+		}
+		return []byte("psk"), idHint, nil
+	}
+
+	test := &serverTest{
+		name:    "PSK-identity",
+		command: []string{"openssl", "s_client", "-no_ticket", "-cipher", "PSK-AES128-CBC-SHA256", "-psk", "70736b", "-psk_identity", "id"},
+		config:  config,
+	}
+	runServerTestTLS12(t, test)
+}
+
 func TestHandshakeServerALPN(t *testing.T) {
 	config := testConfig.Clone()
 	config.NextProtos = []string{"proto1", "proto2"}

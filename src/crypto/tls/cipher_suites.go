@@ -12,6 +12,7 @@ import (
 	"crypto/rc4"
 	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/sha512"
 	"crypto/x509"
 	"hash"
 
@@ -26,7 +27,7 @@ type keyAgreement interface {
 	// In the case that the key agreement protocol doesn't use a
 	// ServerKeyExchange message, generateServerKeyExchange can return nil,
 	// nil.
-	generateServerKeyExchange(*Config, *Certificate, *clientHelloMsg, *serverHelloMsg) (*serverKeyExchangeMsg, error)
+	generateServerKeyExchange(*Config, *Certificate, *clientHelloMsg, *ClientHelloInfo, *serverHelloMsg) (*serverKeyExchangeMsg, error)
 	processClientKeyExchange(*Config, *Certificate, *clientKeyExchangeMsg, uint16) ([]byte, error)
 
 	// On the client side, the next two methods are called in order.
@@ -57,6 +58,9 @@ const (
 	// suiteDefaultOff indicates that this cipher suite is not included by
 	// default.
 	suiteDefaultOff
+	// suitePSK indicates that the cipher suite uses a preshared key and not
+	// certificates.
+	suitePSK
 )
 
 // A cipherSuite is a specific combination of key agreement, cipher and MAC
@@ -97,6 +101,12 @@ var cipherSuites = []*cipherSuite{
 	{TLS_RSA_WITH_AES_256_CBC_SHA, 32, 20, 16, rsaKA, 0, cipherAES, macSHA1, nil},
 	{TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA, 24, 20, 8, ecdheRSAKA, suiteECDHE, cipher3DES, macSHA1, nil},
 	{TLS_RSA_WITH_3DES_EDE_CBC_SHA, 24, 20, 8, rsaKA, 0, cipher3DES, macSHA1, nil},
+
+	// Preshared key cipher suites are enabled only if Config.PresharedKey is set.
+	{TLS_PSK_WITH_AES_128_GCM_SHA256, 16, 0, 4, pskKA, suitePSK | suiteDefaultOff, nil, nil, aeadAESGCM},
+	{TLS_PSK_WITH_AES_256_GCM_SHA384, 32, 0, 4, pskKA, suitePSK | suiteDefaultOff | suiteSHA384, nil, nil, aeadAESGCM},
+	{TLS_PSK_WITH_AES_128_CBC_SHA256, 16, 32, 16, pskKA, suitePSK | suiteDefaultOff, cipherAES, macSHA256, nil},
+	{TLS_PSK_WITH_AES_256_CBC_SHA384, 32, 48, 16, pskKA, suitePSK | suiteDefaultOff | suiteSHA384, cipherAES, macSHA384, nil},
 
 	// RC4-based cipher suites are disabled by default.
 	{TLS_RSA_WITH_RC4_128_SHA, 16, 20, 0, rsaKA, suiteDefaultOff, cipherRC4, macSHA1, nil},
@@ -142,6 +152,12 @@ func macSHA1(version uint16, key []byte) macFunction {
 // so the given version is ignored.
 func macSHA256(version uint16, key []byte) macFunction {
 	return tls10MAC{hmac.New(sha256.New, key)}
+}
+
+// macSHA384 returns a SHA-384 based MAC. These are only supported in TLS 1.2
+// so the given version is ignored.
+func macSHA384(version uint16, key []byte) macFunction {
+	return tls10MAC{hmac.New(sha512.New384, key)}
 }
 
 type macFunction interface {
@@ -345,6 +361,10 @@ func ecdheRSAKA(version uint16) keyAgreement {
 	}
 }
 
+func pskKA(version uint16) keyAgreement {
+	return &pskKeyAgreement{}
+}
+
 // mutualCipherSuite returns a cipherSuite given a list of supported
 // ciphersuites and the id requested by the peer.
 func mutualCipherSuite(have []uint16, want uint16) *cipherSuite {
@@ -373,6 +393,10 @@ const (
 	TLS_RSA_WITH_AES_128_CBC_SHA256         uint16 = 0x003c
 	TLS_RSA_WITH_AES_128_GCM_SHA256         uint16 = 0x009c
 	TLS_RSA_WITH_AES_256_GCM_SHA384         uint16 = 0x009d
+	TLS_PSK_WITH_AES_128_GCM_SHA256         uint16 = 0x00a8
+	TLS_PSK_WITH_AES_256_GCM_SHA384         uint16 = 0x00a9
+	TLS_PSK_WITH_AES_128_CBC_SHA256         uint16 = 0x00ae
+	TLS_PSK_WITH_AES_256_CBC_SHA384         uint16 = 0x00af
 	TLS_ECDHE_ECDSA_WITH_RC4_128_SHA        uint16 = 0xc007
 	TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA    uint16 = 0xc009
 	TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA    uint16 = 0xc00a
