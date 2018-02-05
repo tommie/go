@@ -601,6 +601,7 @@ func TestHandshakeClientECDHEECDSAChaCha20(t *testing.T) {
 
 func TestHandshakeClientPSKAES128GCMSHA256(t *testing.T) {
 	config := testConfig.Clone()
+	config.Certificates = nil
 	config.CipherSuites = []uint16{TLS_PSK_WITH_AES_128_GCM_SHA256}
 	config.PresharedKey = func(idHint []byte) ([]byte, []byte, error) {
 		// Client_identity is hardcoded in openssl s_server and must match.
@@ -618,6 +619,7 @@ func TestHandshakeClientPSKAES128GCMSHA256(t *testing.T) {
 
 func TestHandshakeClientPSKAES256GCMSHA384(t *testing.T) {
 	config := testConfig.Clone()
+	config.Certificates = nil
 	config.CipherSuites = []uint16{TLS_PSK_WITH_AES_256_GCM_SHA384}
 	config.PresharedKey = func(idHint []byte) ([]byte, []byte, error) {
 		// Client_identity is hardcoded in openssl s_server and must match.
@@ -635,6 +637,7 @@ func TestHandshakeClientPSKAES256GCMSHA384(t *testing.T) {
 
 func TestHandshakeClientPSKAES128CBCSHA256(t *testing.T) {
 	config := testConfig.Clone()
+	config.Certificates = nil
 	config.CipherSuites = []uint16{TLS_PSK_WITH_AES_128_CBC_SHA256}
 	config.PresharedKey = func(idHint []byte) ([]byte, []byte, error) {
 		// Client_identity is hardcoded in openssl s_server and must match.
@@ -654,6 +657,7 @@ func TestHandshakeClientPSKAES128CBCSHA256(t *testing.T) {
 
 func TestHandshakeClientPSKAES256CBCSHA384(t *testing.T) {
 	config := testConfig.Clone()
+	config.Certificates = nil
 	config.CipherSuites = []uint16{TLS_PSK_WITH_AES_256_CBC_SHA384}
 	config.PresharedKey = func(idHint []byte) ([]byte, []byte, error) {
 		// Client_identity is hardcoded in openssl s_server and must match.
