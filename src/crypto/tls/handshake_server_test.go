@@ -771,6 +771,7 @@ func TestHandshakeServerX25519(t *testing.T) {
 
 func TestHandshakeServerPSKAES128GCMSHA256(t *testing.T) {
 	config := testConfig.Clone()
+	config.Certificates = nil
 	config.PresharedKey = func(idHint []byte) ([]byte, []byte, error) {
 		return []byte("psk"), idHint, nil
 	}
@@ -785,6 +786,7 @@ func TestHandshakeServerPSKAES128GCMSHA256(t *testing.T) {
 
 func TestHandshakeServerPSKAES256GCMSHA384(t *testing.T) {
 	config := testConfig.Clone()
+	config.Certificates = nil
 	config.PresharedKey = func(idHint []byte) ([]byte, []byte, error) {
 		return []byte("psk"), idHint, nil
 	}
@@ -799,6 +801,7 @@ func TestHandshakeServerPSKAES256GCMSHA384(t *testing.T) {
 
 func TestHandshakeServerPSKAES128CBCSHA256(t *testing.T) {
 	config := testConfig.Clone()
+	config.Certificates = nil
 	config.PresharedKey = func(idHint []byte) ([]byte, []byte, error) {
 		return []byte("psk"), idHint, nil
 	}
@@ -815,6 +818,7 @@ func TestHandshakeServerPSKAES128CBCSHA256(t *testing.T) {
 
 func TestHandshakeServerPSKAES256CBCSHA384(t *testing.T) {
 	config := testConfig.Clone()
+	config.Certificates = nil
 	config.PresharedKey = func(idHint []byte) ([]byte, []byte, error) {
 		return []byte("psk"), idHint, nil
 	}

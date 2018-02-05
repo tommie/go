@@ -27,6 +27,7 @@ type serverHandshakeState struct {
 	ecdsaOk               bool
 	rsaDecryptOk          bool
 	rsaSignOk             bool
+	pskOk                 bool
 	sessionState          *sessionState
 	finishedHash          finishedHash
 	masterSecret          []byte
@@ -219,34 +220,37 @@ Curves:
 		c.sendAlert(alertInternalError)
 		return false, err
 	}
-	if hs.clientHello.scts {
-		hs.hello.scts = hs.cert.SignedCertificateTimestamps
-	}
+	if hs.cert != nil {
+		if hs.clientHello.scts {
+			hs.hello.scts = hs.cert.SignedCertificateTimestamps
+		}
 
-	if priv, ok := hs.cert.PrivateKey.(crypto.Signer); ok {
-		switch priv.Public().(type) {
-		case *ecdsa.PublicKey:
-			hs.ecdsaOk = true
-		case *rsa.PublicKey:
-			hs.rsaSignOk = true
-		default:
-			c.sendAlert(alertInternalError)
-			return false, fmt.Errorf("tls: unsupported signing key type (%T)", priv.Public())
+		if priv, ok := hs.cert.PrivateKey.(crypto.Signer); ok {
+			switch priv.Public().(type) {
+			case *ecdsa.PublicKey:
+				hs.ecdsaOk = true
+			case *rsa.PublicKey:
+				hs.rsaSignOk = true
+			default:
+				c.sendAlert(alertInternalError)
+				return false, fmt.Errorf("tls: unsupported signing key type (%T)", priv.Public())
+			}
+		}
+		if priv, ok := hs.cert.PrivateKey.(crypto.Decrypter); ok {
+			switch priv.Public().(type) {
+			case *rsa.PublicKey:
+				hs.rsaDecryptOk = true
+			default:
+				c.sendAlert(alertInternalError)
+				return false, fmt.Errorf("tls: unsupported decryption key type (%T)", priv.Public())
+			}
+		}
+
+		if hs.checkForResumption() {
+			return true, nil
 		}
 	}
-	if priv, ok := hs.cert.PrivateKey.(crypto.Decrypter); ok {
-		switch priv.Public().(type) {
-		case *rsa.PublicKey:
-			hs.rsaDecryptOk = true
-		default:
-			c.sendAlert(alertInternalError)
-			return false, fmt.Errorf("tls: unsupported decryption key type (%T)", priv.Public())
-		}
-	}
-
-	if hs.checkForResumption() {
-		return true, nil
-	}
+	hs.pskOk = c.config.PresharedKey != nil
 
 	var preferenceList, supportedList []uint16
 	if c.config.PreferServerCipherSuites {
@@ -264,6 +268,11 @@ Curves:
 	}
 
 	if hs.suite == nil {
+		if hs.cert == nil {
+			c.sendAlert(alertInternalError)
+			return false, errors.New("tls: no certificates configured")
+		}
+
 		c.sendAlert(alertHandshakeFailure)
 		return false, errors.New("tls: no cipher suite supported by both client and server")
 	}
@@ -361,7 +370,7 @@ func (hs *serverHandshakeState) doResumeHandshake() error {
 func (hs *serverHandshakeState) doFullHandshake() error {
 	c := hs.c
 
-	if hs.clientHello.ocspStapling && len(hs.cert.OCSPStaple) > 0 {
+	if hs.cert != nil && hs.clientHello.ocspStapling && len(hs.cert.OCSPStaple) > 0 {
 		hs.hello.ocspStapling = true
 	}
 
@@ -795,6 +804,10 @@ func (hs *serverHandshakeState) setCipherSuite(id uint16, supportedCipherSuites 
 						continue
 					}
 				} else if !hs.rsaSignOk {
+					continue
+				}
+			} else if candidate.flags&suitePSK != 0 {
+				if !hs.pskOk {
 					continue
 				}
 			} else if !hs.rsaDecryptOk {
